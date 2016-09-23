@@ -1,3 +1,7 @@
+# Art
+dalvik.vm.dex2oat-flags=--no-watch-dog
+ro.sys.fw.dex2oat_thread_count=4
+
 # Audio
 ro.qc.sdk.audio.fluencetype=fluence
 persist.audio.fluence.voicecall=true
@@ -11,11 +15,11 @@ audio.offload.pcm.16bit.enable=false
 audio.offload.pcm.24bit.enable=true
 use.voice.path.for.pcm.voip=true
 
-# Camera
-persist.camera.cpp.duplication=false
-
 # Bluetooth
 bluetooth.hfp.client=1
+
+# Camera
+persist.camera.cpp.duplication=false
 
 # Display
 debug.sf.hw=0
@@ -82,12 +86,6 @@ persist.radio.apm_sim_not_pwdn=1
 persist.radio.sib16_support=1
 persist.radio.multisim.config=dsds
 telephony.lteOnCdmaDevice=1
-
-# QMI
-persist.data.qmi.adb_logmask=0
-
-# QC vendor extension
-ro.vendor.extension_library=libqti-perfd-client.so
 
 # Time
 persist.timed.enable=true
