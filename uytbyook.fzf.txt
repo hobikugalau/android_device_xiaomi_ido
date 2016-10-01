@@ -1,0 +1,27 @@
+﻿ido: Update wifi configs from stock
+
+# Conflicts:
+#	wifi/WCNSS_qcom_cfg.ini
+#	wifi/WCNSS_qcom_wlan_nv.bin
+#
+# It looks like you may be committing a cherry-pick.
+# If this is not correct, please remove the file
+#	.git/CHERRY_PICK_HEAD
+# and try again.
+
+
+# Please enter the commit message for your changes. Lines starting
+# with '#' will be ignored, and an empty message aborts the commit.
+#
+# Author:    Anik1199 <anik9280@gmail.com>
+# Date:      Sun Oct 2 00:59:58 2016 +0600
+#
+# On branch cm-13.0
+# Your branch is up-to-date with 'origin/cm-13.0'.
+#
+# You are currently cherry-picking commit 8638eb2.
+#
+# Changes to be committed:
+#	modified:   wifi/WCNSS_qcom_cfg.ini
+#
+
