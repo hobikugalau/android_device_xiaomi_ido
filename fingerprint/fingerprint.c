@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#define LOG_TAG "ido FPC HAL"
+#define LOG_TAG "AOSP FPC HAL"
 
 #include <errno.h>
 #include <malloc.h>
@@ -23,6 +23,7 @@
 #include <hardware/hardware.h>
 #include <hardware/fingerprint.h>
 #include <pthread.h>
+#include <stdlib.h>
 #include "fpc_imp.h"
 
 
@@ -33,26 +34,22 @@ pthread_t thread;
 pthread_mutex_t lock;
 
 fingerprint_notify_t callback;
-static char db_path[255];
-static uint32_t fpc_gid = 0;
+char db_path[255];
 
 void *enroll_thread_loop()
 {
     ALOGI("%s", __func__);
+    //redmi 3 doesnt do this
+    //uint32_t print_count = fpc_get_print_count();
+    //ALOGD("%s : print count is : %u", __func__, print_count);
 
-    uint32_t print_count = fpc_get_print_count();
-    ALOGD("%s : print count is : %u", __func__, print_count);
-
-    int ret = fpc_enroll_start(print_count);
-    if(ret < 0)
-    {
-        ALOGE("Starting enrol failed: %d\n", ret);
-    }
+    fpc_enroll_start();
 
     int status = 1;
+    int remaining_touches = 20;
 
     while((status = fpc_capture_image()) >= 0) {
-        ALOGD("%s : Got Input status=%d", __func__, status);
+        ALOGD("%s : Got Input", __func__);
 
         if (status <= FINGERPRINT_ACQUIRED_TOO_FAST) {
             fingerprint_msg_t msg;
@@ -62,12 +59,12 @@ void *enroll_thread_loop()
         }
 
         //image captured
-        if (status == FINGERPRINT_ACQUIRED_GOOD) {
+        if (status == FINGERPRINT_ACQUIRED_GOOD ) { //FINGERPRINT_ACQUIRED_GOOD) {
             ALOGI("%s : Enroll Step", __func__);
-            uint32_t remaining_touches = 0;
-            int ret = fpc_enroll_step(&remaining_touches);
-            ALOGE("%s: step: %d, touches=%d\n", __func__, ret, remaining_touches);
-            if (ret > 0) {
+//            if (fpc_enroll_step() < 100) {
+		fpc_enroll_step();
+//		add decrement counter steps here
+//                int remaining_touches = fpc_get_remaining_touches();
                 ALOGI("%s : Touches Remaining : %d", __func__, remaining_touches);
                 if (remaining_touches > 0) {
                     fingerprint_msg_t msg;
@@ -77,11 +74,11 @@ void *enroll_thread_loop()
                     msg.data.enroll.samples_remaining = remaining_touches;
                     msg.data.enroll.msg = 0;
                     callback(&msg);
-                }
-            } else {
+		    remaining_touches--;
+  //              } 
 
-                uint32_t print_id = 0;
-                int print_index = fpc_enroll_end(&print_id);
+            } else {
+                int print_index = fpc_enroll_end();
 
                 if (print_index < 0){
                     ALOGE("%s : Error getting new print index : %d", __func__,print_index);
@@ -92,22 +89,33 @@ void *enroll_thread_loop()
                     break;
                 }
 
+                ALOGI("%s : Got print index : %d", __func__,print_index);
+                uint32_t print_id = fpc_get_print_id(print_index);
+                ALOGI("%s : Got print id : %lu", __func__,(unsigned long) print_id);
+                
                 uint32_t db_length = fpc_get_user_db_length();
                 ALOGI("%s : User Database Length Is : %lu", __func__,(unsigned long) db_length);
-                fpc_store_user_db(db_length, db_path);
 
-                ALOGI("%s : Got print id : %lu", __func__,(unsigned long) print_id);
+//                set_bandwidth_fn(mHandle,true); //check this (used in redmi 3 hal)
+
+                fpc_store_user_db(db_length, db_path);
+//                set_bandwidth_fn(mHandle,false); //check this (used in redmi 3 hal)
+                //fpc_tac_get_template from index
+
+
+
 
                 fingerprint_msg_t msg;
                 msg.type = FINGERPRINT_TEMPLATE_ENROLLING;
                 msg.data.enroll.finger.fid = print_id;
-                msg.data.enroll.finger.gid = fpc_gid;
+                msg.data.enroll.finger.gid = 0;
                 msg.data.enroll.samples_remaining = 0;
                 msg.data.enroll.msg = 0;
                 callback(&msg);
                 break;
             }
         }
+
         pthread_mutex_lock(&lock);
         if (!auth_thread_running) {
             pthread_mutex_unlock(&lock);
@@ -116,8 +124,7 @@ void *enroll_thread_loop()
         pthread_mutex_unlock(&lock);
     }
 
-    uint32_t print_id = 0;
-    fpc_enroll_end(&print_id);
+    fpc_enroll_end();
     ALOGI("%s : finishing",__func__);
 
     pthread_mutex_lock(&lock);
@@ -134,18 +141,8 @@ void *auth_thread_loop()
 
     int status = 1;
 
-    while((status = fpc_capture_image()) >= 0 ) {
-        ALOGD("%s : Got Input with status %d", __func__, status);
-
-        pthread_mutex_lock(&lock);
-        if (!auth_thread_running) {
-            pthread_mutex_unlock(&lock);
-            break;
-        }
-        pthread_mutex_unlock(&lock);
-
-        if(status >= 1000)
-            continue;
+    while((status = fpc_capture_image()) >= 0) {
+        ALOGD("%s : Got Input status = %d", __func__, status);
 
         if (status <= FINGERPRINT_ACQUIRED_TOO_FAST) {
             fingerprint_msg_t msg;
@@ -156,37 +153,50 @@ void *auth_thread_loop()
 
         if (status == FINGERPRINT_ACQUIRED_GOOD) {
 
-            uint32_t print_id = 0;
-            int verify_state = fpc_auth_step(&print_id);
+            int verify_state = fpc_auth_step();
             ALOGI("%s : Auth step = %d", __func__, verify_state);
 
-            if (verify_state >= 0) {
-                if(print_id > 0)
-                {
-                    ALOGI("%s : Got print id : %lu", __func__, (unsigned long) print_id);
+//            if (verify_state >= 0) {
 
-                    hw_auth_token_t hat;
-                    fpc_get_hw_auth_obj(&hat, sizeof(hw_auth_token_t));
+//                uint32_t print_id = fpc_get_print_id(verify_state);
+//                ALOGI("%s : Got print id : %lu", __func__, (unsigned long) print_id);
 
-                    ALOGI("%s : hat->challenge %lu",__func__,(unsigned long) hat.challenge);
-                    ALOGI("%s : hat->user_id %lu",__func__,(unsigned long) hat.user_id);
-                    ALOGI("%s : hat->authenticator_id %lu",__func__,(unsigned long) hat.authenticator_id);
-                    ALOGI("%s : hat->authenticator_type %d",__func__, hat.authenticator_type);
-                    ALOGI("%s : hat->timestamp %lu",__func__,(unsigned long) hat.timestamp);
-                    ALOGI("%s : hat size %lu",__func__,(unsigned long) sizeof(hw_auth_token_t));
+                hw_auth_token_t hat = {0};
+                //fpc_get_hw_auth_obj(&hat, sizeof(hw_auth_token_t));
+                hat.version = 0;
+                hat.challenge = challenge;
+                hat.user_id = 0;
+                hat.authenticator_id = 1;    // secure authenticator ID
+                hat.authenticator_type = 1;  // hw_authenticator_type_t, in network order
+                hat.timestamp = time(NULL);           // in network order
+hat.hmac[0] = 1;
+                //all this looks unsupported on redmi 3
+//                fpc_get_hw_auth_obj(&hat, sizeof(hw_auth_token_t));
 
-                    fingerprint_msg_t msg;
-                    msg.type = FINGERPRINT_AUTHENTICATED;
-                    msg.data.authenticated.finger.gid = fpc_gid;
-                    msg.data.authenticated.finger.fid = print_id;
+                ALOGI("%s : hat->challange %lu",__func__,(unsigned long) hat.challenge);
+                ALOGI("%s : hat->user_id %lu",__func__,(unsigned long) hat.user_id);
+                ALOGI("%s : hat->authenticator_id %lu",__func__,(unsigned long) hat.authenticator_id);
+                ALOGI("%s : hat->authenticator_type %d",__func__, hat.authenticator_type);
+                ALOGI("%s : hat->timestamp %lu",__func__,(unsigned long) hat.timestamp);
+                ALOGI("%s : hat size %lu",__func__,(unsigned long) sizeof(hw_auth_token_t));
+                
 
-                    msg.data.authenticated.hat = hat;
-
-                    callback(&msg);
-                    break;
-                }
-            }
+                fingerprint_msg_t msg = {0};
+                msg.type = FINGERPRINT_AUTHENTICATED;
+                msg.data.authenticated.finger.gid = 0;
+                msg.data.authenticated.finger.fid = 1;
+                msg.data.authenticated.hat = hat;
+                callback(&msg);
+                break;
+//            }
         }
+
+        pthread_mutex_lock(&lock);
+        if (!auth_thread_running) {
+            pthread_mutex_unlock(&lock);
+            break;
+        }
+        pthread_mutex_unlock(&lock);
     }
 
     fpc_auth_end();
@@ -209,15 +219,19 @@ static int fingerprint_close(hw_device_t *dev)
     }
 }
 
+static uint64_t get_64bit_rand() {
+    return (((uint64_t) rand()) << 32) | ((uint64_t) rand());
+}
+
 static uint64_t fingerprint_pre_enroll(struct fingerprint_device __unused *dev)
 {
-    challenge = fpc_load_auth_challenge();
-    ALOGI("%s : Challenge is : %jd",__func__,challenge);
+    challenge = get_64bit_rand();
+    ALOGI("%s : Challange is : %jd",__func__,challenge);
     return challenge;
 }
 
 static int fingerprint_enroll(struct fingerprint_device __unused *dev,
-                              const hw_auth_token_t *hat,
+                              const hw_auth_token_t __unused *hat,
                               uint32_t __unused gid,
                               uint32_t __unused timeout_sec)
 {
@@ -233,14 +247,17 @@ static int fingerprint_enroll(struct fingerprint_device __unused *dev,
     }
 
 
-    ALOGI("%s : hat->challenge %lu",__func__,(unsigned long) hat->challenge);
+    ALOGI("%s : hat->challange %lu",__func__,(unsigned long) hat->challenge);
     ALOGI("%s : hat->user_id %lu",__func__,(unsigned long) hat->user_id);
     ALOGI("%s : hat->authenticator_id %lu",__func__,(unsigned long) hat->authenticator_id);
     ALOGI("%s : hat->authenticator_type %d",__func__,hat->authenticator_type);
     ALOGI("%s : hat->timestamp %lu",__func__,(unsigned long) hat->timestamp);
     ALOGI("%s : hat size %lu",__func__,(unsigned long) sizeof(hw_auth_token_t));
 
-    fpc_verify_auth_challenge((void*) hat, sizeof(hw_auth_token_t));
+    // from oppo 7r plus
+    if (hat->challenge != challenge && !(hat->authenticator_type & HW_AUTH_FINGERPRINT)) {
+        return -EPERM;
+    }
 
     pthread_mutex_lock(&lock);
     auth_thread_running = true;
@@ -259,7 +276,7 @@ static int fingerprint_enroll(struct fingerprint_device __unused *dev,
 static uint64_t fingerprint_get_auth_id(struct fingerprint_device __unused *dev)
 {
 
-    uint64_t id = fpc_load_db_id();
+    uint64_t id = get_64bit_rand();
     ALOGI("%s : ID : %jd",__func__,id );
     return id;
 
@@ -287,84 +304,112 @@ static int fingerprint_cancel(struct fingerprint_device __unused *dev)
     pthread_join(thread, NULL);
 
     ALOGI("%s : -",__func__);
-
-    fingerprint_msg_t msg;
-    msg.type = FINGERPRINT_ERROR;
-    msg.data.error = FINGERPRINT_ERROR_CANCELED;
-    callback(&msg);
-
     return 0;
 }
 
 static int fingerprint_remove(struct fingerprint_device __unused *dev,
-                              uint32_t gid, uint32_t fid)
+                              uint32_t __unused gid, uint32_t __unused fid)
 {
 
+    //Maximum prints per gid is 5
+    uint32_t prints[5];
+    uint32_t print_count = fpc_get_print_count();
+    ALOGD("%s : print count is : %u", __func__, print_count);
 
-    if (fpc_del_print_id(fid) == 0){
-        fingerprint_msg_t msg;
-        msg.type = FINGERPRINT_TEMPLATE_REMOVED;
-        msg.data.removed.finger.fid = fid;
-        msg.data.removed.finger.gid = gid;
-        callback(&msg);
+    fpc_get_pint_index_cmd_t print_indexs = fpc_get_print_index(print_count);
 
-        uint32_t db_length = fpc_get_user_db_length();
-        ALOGD("%s : User Database Length Is : %lu", __func__,(unsigned long) db_length);
-        fpc_store_user_db(db_length, db_path);
-        return 0;
-    } else {
-        fingerprint_msg_t msg;
-        msg.type = FINGERPRINT_ERROR;
-        msg.data.error = FINGERPRINT_ERROR_UNABLE_TO_REMOVE;
-        callback(&msg);
+    //populate print array with index
+    prints[0] = print_indexs.p1;
+    prints[1] = print_indexs.p2;
+    prints[2] = print_indexs.p3;
+    prints[3] = print_indexs.p4;
+    prints[4] = print_indexs.p5;
 
-        return FINGERPRINT_ERROR;
+    ALOGI("%s : delete print : %lu", __func__,(unsigned long) fid);
+
+    for (uint32_t i = 0; i < print_count; i++){
+        uint32_t print_id = fpc_get_print_id(prints[i]);
+
+        ALOGD("%s : found print : %lu at index %d", __func__,(unsigned long) print_id, prints[i]);
+
+        if (print_id == fid){
+            ALOGD("%s : Print index found at : %d", __func__, i);
+
+            int ret = fpc_del_print_id(prints[i]);
+
+            ALOGD("%s : fpc_del_print_id returns : %d", __func__, ret);
+
+            if (ret == 0){
+
+                uint32_t db_length = fpc_get_user_db_length();
+                ALOGD("%s : User Database Length Is : %lu", __func__,(unsigned long) db_length);
+                fpc_store_user_db(db_length, db_path);
+
+                fingerprint_msg_t msg;
+                msg.type = FINGERPRINT_TEMPLATE_REMOVED;
+                msg.data.removed.finger.fid = print_id;
+                msg.data.removed.finger.gid = 0;
+                callback(&msg);
+
+                return 0;
+            }
+        }
     }
+
+    fingerprint_msg_t msg;
+    msg.type = FINGERPRINT_ERROR;
+    msg.data.error = FINGERPRINT_ERROR_UNABLE_TO_REMOVE;
+    callback(&msg);
+
+    return FINGERPRINT_ERROR;
 }
 
 static int fingerprint_set_active_group(struct fingerprint_device __unused *dev,
-                                        uint32_t gid, const char *store_path)
+                                        uint32_t __unused gid, const char __unused *store_path)
 {
-    int result;
-    // FIXME: suzu hal uses a single db with multiple gid. Support this!
-    #ifdef FPC_DB_PER_GID
-    sprintf(db_path,"%s/data_%d.db", store_path, gid);
-    #else
-    sprintf(db_path,"%s/user.db", store_path);
-    #endif
-    fpc_gid = gid;
 
+    sprintf(db_path,"%s/data_%d.db",store_path,gid);
     ALOGI("%s : storage path set to : %s",__func__, db_path);
-    if((result = fpc_load_user_db(db_path)) != 0)
-    {
-        ALOGE("Error loading user database: %d\n", result);
-        return result;
+    set_bandwidth_fn(mHandle,true);
+	
+    int ret = fpc_load_user_db(db_path);
+    if (!ret) {
+	ALOGE("Faailed to store new db path\n");
     }
-    if((result = fpc_set_gid(gid)) != 0)
-    {
-        ALOGE("Error setting current gid: %d\n", result);
-    }
-    return result;
+     set_bandwidth_fn(mHandle,false);
+
+    return 0;
 
 }
 
-static int fingerprint_enumerate(struct fingerprint_device __unused *dev,
+static int fingerprint_enumerate(struct fingerprint_device *dev,
                                  fingerprint_finger_id_t *results,
                                  uint32_t *max_size)
 {
 
     uint32_t print_count = fpc_get_print_count();
     ALOGD("%s : print count is : %u", __func__, print_count);
-    fpc_fingerprint_index_t print_indexs = fpc_get_print_index(print_count);
+    fpc_get_pint_index_cmd_t print_indexs = fpc_get_print_index(print_count);
+    uint32_t prints[5];
+
+    //populate print array with index
+    prints[0] = print_indexs.p1;
+    prints[1] = print_indexs.p2;
+    prints[2] = print_indexs.p3;
+    prints[3] = print_indexs.p4;
+    prints[4] = print_indexs.p5;
+
 
     if (*max_size == 0) {
         *max_size = print_count;
     } else {
         for (size_t i = 0; i < *max_size && i < print_count; i++) {
-            ALOGD("%s : found print : %lu at index %lu", __func__,(unsigned long) print_indexs.prints[i], i);
 
-            results[i].fid = print_indexs.prints[i];
-            results[i].gid = fpc_gid;
+            uint32_t print_id = fpc_get_print_id(prints[i]);
+            ALOGD("%s : found print : %lu at index %d", __func__,(unsigned long) print_id, prints[i]);
+
+            results[i].fid = print_id;
+            results[i].gid = 0;
         }
     }
 
@@ -383,9 +428,6 @@ static int fingerprint_authenticate(struct fingerprint_device __unused *dev,
     pthread_mutex_lock(&lock);
     auth_thread_running = true;
     pthread_mutex_unlock(&lock);
-
-    // FIXME: Verify whether this needs to run on each 
-    fpc_set_auth_challenge(0);
 
     if(pthread_create(&thread, NULL, auth_thread_loop, NULL)) {
         ALOGE("%s : Error creating thread\n", __func__);
@@ -455,8 +497,8 @@ fingerprint_module_t HAL_MODULE_INFO_SYM = {
         .module_api_version = FINGERPRINT_MODULE_API_VERSION_2_0,
         .hal_api_version    = HARDWARE_HAL_API_VERSION,
         .id                 = FINGERPRINT_HARDWARE_MODULE_ID,
-        .name               = "Kitakami Fingerprint HAL",
-        .author             = "Shane Francis / Jens Andersen",
+        .name               = "Xiaomi ido Fingerprint HAL",
+        .author             = "Vitaliy TOmin / Shane Francis / Jens Andersen",
         .methods            = &fingerprint_module_methods,
     },
 };

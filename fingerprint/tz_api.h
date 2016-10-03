@@ -23,47 +23,41 @@
 extern "C" {
 #endif
 
-#define FP_TZAPP_PATH "/system/vendor/firmware/"
+#define FP_TZAPP_PATH "/firmware/image/"
 #define FP_TZAPP_NAME "tzfinger"
-
-#define KM_TZAPP_PATH "/firmware/image/"
-#define KM_TZAPP_NAME "keymaste"
+//#define FP_TZAPP_PATH "/etc/firmware/"
+//#define FP_TZAPP_NAME "fpctzapp"
 
 #define BUFFER_SIZE 64
 
 //enumerate tz app command ID's
 enum fingerprint_cmd_t {
-    FPC_INIT = 0x00,
-    FPC_ENROLL_START = 0x03,
-    FPC_ENROLL_STEP = 0x04,
-    FPC_ENROLL_END = 0x05,
-    FPC_AUTH_START = 0x07,
-    FPC_AUTH_STEP = 0x08,
-    FPC_AUTH_END = 0x09,
-    FPC_CHK_FP_LOST = 0x0B,
-    FPC_GET_WAKE_TYPE = 0x0C,
-    FPC_INIT_NEW_DB = 0x0F,
-    FPC_SET_FP_STORE = 0x1A,
-    FPC_GET_PRINT_ID = 0x1F,
-    FPC_SET_DB_DATA = 0x0F,
-    FPC_GET_DB_LENGTH = 0x13,
-    FPC_GET_DB_DATA = 0x0E,
-    FPC_GET_ID_LIST = 0x10,
-    FPC_GET_ID_COUNT = 0x11,
-    FPC_GET_DEL_PRINT = 0x12,
-    FPC_CAPTURE_IMAGE = 0x16,
-    FPC_GET_INIT_STATE = 0x19,
-    FPC_GET_AUTH_HAT = 0x21,
-    FPC_GET_DB_ID = 0x20,
-    FPC_VERIFY_AUTH_CHALLENGE = 0x22,
-    FPC_GET_AUTH_CHALLENGE = 0x23,
-    FPC_SET_AUTH_CHALLENGE = 0x24,
-    FPC_SET_INIT_DATA = 0x25,
-    FPC_INIT_UNK_0 = 0x2A,
-    FPC_INIT_UNK_1 = 0x2B,
-    FPC_GET_REMAINING_TOUCHES = 0x2C,
-    FPC_INIT_UNK_2 = 0x26,
-};
+    FPC_INIT = 0x00,  //fpc_ta_init // send_cmd_get
+    FPC_ENROLL_START = 0x03,  //fpc_ta_begin_enrol // send_cmd
+    FPC_ENROLL_STEP = 0x04,  //fpc_ta_enrol // send_cmd
+    FPC_ENROLL_END = 0x05,  //fpc_ta_end_enrol // send_cmd
+    FPC_ENROLL_EXTENDED = 0x06, //fpc_tac_enrol_extended  NOT IMPLEMENTED
+    FPC_AUTH_START = 0x07, //fpc_ta_begin_identify  // send_cmd
+    FPC_AUTH_STEP = 0x08, //fpc_ta_identify // send_cmd
+    FPC_AUTH_END = 0x09, //fpc_ta_end_identify // send_cmd
+    FPC_CHK_FP_LOST = 0x0B, // fpc_ta_check_finger_lost  // send_cmd_get
+    FPC_SET_WAKE = 0x27, // fpc_tac_wakeup_setup // send_cmd
+    FPC_GET_WAKE_TYPE = 0x0C, //fpc_ta_wakeup_qualification // send_cmd
+    FPC_INIT_NEW_DB = 0x0E, //fpc_tac_send_set_template_db_path  // modified_cmd
+    FPC_SET_FP_STORE = 0x20, //fpc_tac_set_active_fingerprint_set  // send_cmd
+    FPC_GET_PRINT_ID = 0x28,  // fpc_tac_get_template_id_from_index
+    FPC_SET_DB_DATA = 0x0D, //fpc_tac_send_set_template_db_path  ?
+    FPC_GET_DB_LENGTH = 0x0F, //fpc_ta_get_template_db_size
+    FPC_GET_DB_DATA = 0x1D, //fpc_ta_load_template_db
+    FPC_GET_ID_LIST = 0x10, //fpc_ta_get_indices
+    FPC_GET_ID_COUNT = 0x11, // fpc_ta_get_template_count // send_cmd_get
+    FPC_GET_DEL_PRINT = 0x12, //fpc_ta_delete_template  // send_cmd
+    FPC_CAPTURE_IMAGE = 0x16, //fpc_ta_capture_image // send_cmd	
+    FPC_GET_INIT_STATE = 0x1f, // fpc_init_lib step 2 
+    FPC_INIT_UNK_0 = 0x25, // fpc_get_sensor_info 
+    FPC_INIT_UNK_1 = 0x26, // fpc_tac_open  (check if return 13) engeneering mode
+};   
+
 
 typedef struct {
     uint32_t cmd_id;

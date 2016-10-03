@@ -14,30 +14,28 @@
 # limitations under the License.
 #
 
-ifeq ($(filter-out ido,$(TARGET_DEVICE)),)
+#ifeq ($(filter-out satsuki sumire suzuran,$(TARGET_DEVICE)),)
 LOCAL_PATH:= $(call my-dir)
 
 include $(CLEAR_VARS)
 
-LOCAL_MODULE := fingerprint.$(TARGET_DEVICE)
+LOCAL_MODULE := fingerprint.$(TARGET_BOARD_PLATFORM)
 LOCAL_MODULE_RELATIVE_PATH := hw
 LOCAL_SRC_FILES := fingerprint.c \
-		   QSEEComFunc.c
-
-ifeq ($(filter-out ido,$(TARGET_DEVICE)),)
-LOCAL_SRC_FILES += fpc_imp_ido.c
-LOCAL_CFLAGS += -DFPC_DB_PER_GID
-endif
+		   QSEEComFunc.c \
+		   fpc_imp.c
 
 LOCAL_CFLAGS += -std=c99
 LOCAL_SHARED_LIBRARIES := liblog \
 			  libdl \
 			  libutils
 
+ifeq ($(TARGET_COMPILE_WITH_MSM_KERNEL),true)
 LOCAL_C_INCLUDES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
 LOCAL_ADDITIONAL_DEPENDENCIES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
+endif
 
 LOCAL_MODULE_TAGS := optional
 
 include $(BUILD_SHARED_LIBRARY)
-endif
+#endif

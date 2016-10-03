@@ -121,7 +121,7 @@ PRODUCT_PACKAGES += \
 # Fingerprint
 PRODUCT_PACKAGES += \
     fingerprintd \
-    fingerprint.ido
+    fingerprint.msm8916
 
 # GPS
 PRODUCT_PACKAGES += \

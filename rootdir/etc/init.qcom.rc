@@ -279,6 +279,9 @@ on post-fs-data
     mkdir /data/misc/fm 0770 system system
     chmod 0770 /data/misc/fm
 
+    # Fingerprint
+    mkdir /data/fpc 0700 system system
+
     mkdir /data/tombstones 0771 system system
     mkdir /tombstones/modem 0771 system system
     mkdir /tombstones/lpass 0771 system system
@@ -461,8 +464,8 @@ service loc_launcher /system/bin/loc_launcher
 # Fingerprint service
 service fingerprintd /system/bin/fingerprintd
     class late_start
+    socket fpce stream 0666 system system
     user system
-    group input
 
 on property:ro.data.large_tcp_window_size=true
     # Adjust socket buffer to enlarge TCP receive window for high bandwidth (e.g. DO-RevB)

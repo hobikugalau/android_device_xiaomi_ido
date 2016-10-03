@@ -14,10 +14,7 @@
  * limitations under the License.
  */
 
-#include "QSEEComAPI.h"
-#include "QSEEComFunc.h"
 #include "fpc_imp.h"
-#include "tz_api_ido.h"
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
@@ -29,13 +26,10 @@
 
 #include <cutils/log.h>
 
-#define SPI_CLK_FILE "/sys/bus/spi/devices/spi0.1/clk_enable"
-#define SPI_PREP_FILE "/sys/bus/spi/devices/spi0.1/spi_prepare"
-#define SPI_WAKE_FILE "/sys/bus/spi/devices/spi0.1/wakeup_enable"
-#define SPI_IRQ_FILE "/sys/bus/spi/devices/spi0.1/irq"
-
-static struct QSEECom_handle * mHandle;
-static struct QSEECom_handle * mHdl;
+#define SPI_CLK_FILE "/sys/devices/soc.0/fpc1020.70/clk_enable"
+#define SPI_PREP_FILE "/sys/devices/soc.0/fpc1020.70/spi_prepare"
+#define SPI_WAKE_FILE "/sys/devices/soc.0/fpc1020.70/wakeup_enable"
+#define SPI_IRQ_FILE "/sys/devices/soc.0/fpc1020.70/irq"
 
 static int qsee_load_trustlet(struct QSEECom_handle **clnt_handle,
                        const char *path, const char *fname,
@@ -137,6 +131,7 @@ int device_enable()
 
 int device_disable()
 {
+
     if (sysfs_write(SPI_CLK_FILE,"0")< 0) {
         return -1;
     }
@@ -228,22 +223,14 @@ uint64_t get_int64_command(uint32_t cmd, uint32_t param, struct QSEECom_handle *
 
 }
 
-int fpc_set_auth_challenge(int64_t __unused challenge)
-{
-    return send_normal_command(FPC_SET_AUTH_CHALLENGE,0,mHandle);
-}
-
-uint64_t fpc_load_auth_challenge()
-{
-    return get_int64_command(FPC_GET_AUTH_CHALLENGE,0,mHandle);
-}
-
 uint64_t fpc_load_db_id()
 {
-    return get_int64_command(FPC_GET_DB_ID,0,mHandle);
+	return 0;
+//not implemented for redmi 3
+//    return get_int64_command(FPC_GET_DB_ID,0,mHandle);
 }
 
-int fpc_get_hw_auth_obj(void * buffer, int length)
+/*int fpc_get_hw_auth_obj(void * buffer, int length)
 {
 
     fpc_send_mod_cmd_t* send_cmd = (fpc_send_mod_cmd_t*) mHandle->ion_sbuffer;
@@ -288,37 +275,21 @@ int fpc_get_hw_auth_obj(void * buffer, int length)
     qcom_km_ion_dealloc(&ihandle);
     return 0;
 
-}
+}*/
 
-int fpc_verify_auth_challenge(void* hat, uint32_t size)
+/*int fpc_verify_auth_challange(void* hat, uint32_t size)
 {
     return send_modified_command_to_tz(FPC_VERIFY_AUTH_CHALLENGE,mHandle,hat,size);
-}
+}*/
 
-static uint32_t fpc_get_remaining_touches()
+/*uint32_t fpc_get_remaining_touches()
 {
     return send_normal_command(FPC_GET_REMAINING_TOUCHES,0,mHandle);
-}
+}*/
 
 uint32_t fpc_del_print_id(uint32_t id)
 {
-
-    uint32_t print_count = fpc_get_print_count();
-    ALOGD("%s : print count is : %u", __func__, print_count);
-    fpc_fingerprint_index_t print_indexs = fpc_get_print_ids(print_count);
-    ALOGI("%s : delete print : %lu", __func__,(unsigned long) id);
-
-    for (uint32_t i = 0; i < print_indexs.print_count; i++){
-
-        uint32_t print_id = fpc_get_print_id(print_indexs.prints[i]);
-
-        if (print_id == id){
-                ALOGD("%s : Print index found at : %d", __func__, i);
-                return send_normal_command(FPC_GET_DEL_PRINT,print_indexs.prints[i],mHandle);
-        }
-    }
-
-    return -1;
+    return send_normal_command(FPC_GET_DEL_PRINT,id,mHandle);
 }
 
 // Returns -1 on error, 1 on check again and 0 on ready to capture
@@ -327,34 +298,54 @@ int fpc_wait_for_finger()
 
     int finger_state  = send_normal_command(FPC_CHK_FP_LOST,FPC_CHK_FP_LOST,mHandle);
 
-    if (finger_state == 4) {
+//    ALOGD("%s : got finget_state = %d\n", __func__, finger_state);
+//    return -1;
+    // 4 - finger detected
+    // 6 - no
+
+    /*if (finger_state == 4) {
         ALOGD("%s : WAIT FOR FINGER UP\n", __func__);
-    } else if (finger_state == 8) {
+    } else if (finger_state == 6) {
         ALOGD("%s : WAIT FOR FINGER DOWN\n", __func__);
-    } else if (finger_state == 2) {
+    } else if (finger_state == 10) {
         ALOGD("%s : WAIT FOR FINGER NOT NEEDED\n", __func__);
         return 1;
     } else {
         return -1;
+    }*/
+
+    if (finger_state != 4) {
+//        ALOGD("%s : FINGER NOT DETECTED finger_state = %d\n", __func__, finger_state);
+	return -1;
     }
 
-    sysfs_write(SPI_WAKE_FILE,"1");
+    sysfs_write(SPI_WAKE_FILE,"enable");
+    if (send_normal_command(FPC_SET_WAKE,0,mHandle) != 0) {
+        ALOGE("Error sending FPC_SET_WAKE to tz\n");
+        return -1;
+    }
     sysfs_write(SPI_CLK_FILE,"0");
 
     ALOGD("Attempting to poll device IRQ\n");
 
+    ALOGD("%s : SPI_IRQ_FILE poll\n", __func__);
     if (sys_fs_irq_poll(SPI_IRQ_FILE) < 0) {
         sysfs_write(SPI_CLK_FILE,"1");
-        sysfs_write(SPI_WAKE_FILE,"0");
+        sysfs_write(SPI_WAKE_FILE,"disable");
         return 1;
     }
 
+    ALOGD("%s : SPI_CLK_FILE 1\n", __func__);
     sysfs_write(SPI_CLK_FILE,"1");
-    sysfs_write(SPI_WAKE_FILE,"0");
+    sysfs_write(SPI_WAKE_FILE,"disable");
 
     int wake_type = send_normal_command(FPC_GET_WAKE_TYPE,0,mHandle);
 
-    if (wake_type == 3) {
+    //5 ready to capture
+    //4 waiting stable
+    //!6 unexpected return
+    // 6 too fast
+    if (wake_type == 5) { 
         ALOGD("%s : READY TO CAPTURE\n", __func__);
         return 0;
     } else {
@@ -379,6 +370,7 @@ int fpc_capture_image()
 
     if (ret == 0) {
         //If wait reported 0 we can try and capture the image
+	ALOGE("Trying capture image \n");
         ret = send_normal_command(FPC_CAPTURE_IMAGE,0,mHandle);
     } else {
         //return a high value as to not trigger a user notification
@@ -393,7 +385,7 @@ int fpc_capture_image()
     return ret;
 }
 
-int fpc_enroll_step(uint32_t *remaining_touches)
+int fpc_enroll_step()
 {
 
     fpc_send_std_cmd_t* send_cmd = (fpc_send_std_cmd_t*) mHandle->ion_sbuffer;
@@ -405,23 +397,23 @@ int fpc_enroll_step(uint32_t *remaining_touches)
     int ret = send_cmd_fn(mHandle,send_cmd,64,rec_cmd,64);
 
     if(ret < 0) {
+	ALOGE("Error enroll step device\n");
         return -1;
     }
-
-    *remaining_touches = fpc_get_remaining_touches();
-
+    ALOGE("Enroll step return: %d\n", rec_cmd->ret_val);
     return rec_cmd->ret_val;
 }
 
-int fpc_enroll_start(int print_index)
+int fpc_enroll_start()
 {
-    fpc_send_enroll_start_cmd_t* send_cmd = (fpc_send_enroll_start_cmd_t*) mHandle->ion_sbuffer;
+    fpc_send_std_cmd_t* send_cmd = (fpc_send_enroll_start_cmd_t*) mHandle->ion_sbuffer;
     fpc_send_std_cmd_t* rec_cmd = (fpc_send_std_cmd_t*) mHandle->ion_sbuffer + 64;
 
     send_cmd->cmd_id = FPC_ENROLL_START;
     send_cmd->ret_val = 0x00;
-    send_cmd->na1 = 0x45;
-    send_cmd->print_index = print_index;
+    //redmi3 use simple commend here
+//     send_cmd->na1 = 0x45;
+//     send_cmd->print_index = print_index;
 
     int ret = send_cmd_fn(mHandle,send_cmd,64,rec_cmd,64);
 
@@ -432,65 +424,38 @@ int fpc_enroll_start(int print_index)
     return rec_cmd->ret_val;
 }
 
-int fpc_enroll_end(uint32_t *print_id)
+int fpc_enroll_end()
 {
 
-    int index = send_normal_command(FPC_ENROLL_END,0x0,mHandle);
+    int ret = send_normal_command(FPC_ENROLL_END,0x0,mHandle);
 
-    if (index < 0 || index > 4) {
+    if (ret < 0) { //  check this || ret > 4
         ALOGE("Error sending FPC_ENROLL_END to tz\n");
         return -1;
     }
-
-    *print_id = fpc_get_print_id(index);
-
-    return 0;
+    return ret;
 }
 
-fpc_fingerprint_index_t fpc_get_print_ids(int count)
-{
-
-    fpc_fingerprint_index_t data;
-
-    fpc_send_std_cmd_t* send_cmd = (fpc_send_std_cmd_t*) mHandle->ion_sbuffer;
-    fpc_get_pint_index_cmd_t* rec_cmd = (fpc_get_pint_index_cmd_t*) mHandle->ion_sbuffer + 64;
-
-    send_cmd->cmd_id = FPC_GET_ID_LIST;
-    send_cmd->ret_val = count;
-    send_cmd->length = count;
-
-    int ret = send_cmd_fn(mHandle,send_cmd,64,rec_cmd,64);
-
-    data.prints[0] = rec_cmd->p1;
-    data.prints[1] = rec_cmd->p2;
-    data.prints[2] = rec_cmd->p3;
-    data.prints[3] = rec_cmd->p4;
-    data.prints[4] = rec_cmd->p5;
-    data.print_count = rec_cmd->print_count;
-
-    return data;
-}
 
 int fpc_auth_start()
 {
 
     int print_count = fpc_get_print_count();
-    fpc_fingerprint_index_t prints;
     ALOGI("%s : Number Of Prints Available : %d",__func__,print_count);
 
-    prints = fpc_get_print_ids(print_count);
+    fpc_get_pint_index_cmd_t print_idx = fpc_get_print_index(print_count);
 
     fpc_get_pint_index_cmd_t* send_cmd = (fpc_get_pint_index_cmd_t*) mHandle->ion_sbuffer;
     fpc_send_std_cmd_t* rec_cmd = (fpc_send_std_cmd_t*) mHandle->ion_sbuffer + 64;
 
 
     send_cmd->cmd_id = FPC_AUTH_START;
-    send_cmd->p1 = prints.prints[0];
-    send_cmd->p2 = prints.prints[1];
-    send_cmd->p3 = prints.prints[2];
-    send_cmd->p4 = prints.prints[3];
-    send_cmd->p5 = prints.prints[4];
-    send_cmd->print_count = prints.print_count;
+    send_cmd->p1 = print_idx.p1;
+    send_cmd->p2 = print_idx.p2;
+    send_cmd->p3 = print_idx.p3;
+    send_cmd->p4 = print_idx.p4;
+    send_cmd->p5 = print_idx.p5;
+    send_cmd->print_count = print_idx.print_count;
 
     int ret = send_cmd_fn(mHandle,send_cmd,64,rec_cmd,64);
 
@@ -502,7 +467,7 @@ int fpc_auth_start()
     return rec_cmd->ret_val;
 }
 
-uint32_t fpc_auth_step(uint32_t *print_id)
+uint32_t fpc_auth_step()
 {
 
     fpc_send_std_cmd_t* send_cmd = (fpc_send_std_cmd_t*) mHandle->ion_sbuffer;
@@ -514,6 +479,7 @@ uint32_t fpc_auth_step(uint32_t *print_id)
     int ret = send_cmd_fn(mHandle,send_cmd,64,rec_cmd,64);
 
     if(ret < 0) {
+        ALOGE("Error sending FPC_AUTH_STEP to tz\n");
         return -1;
     }
 
@@ -522,10 +488,7 @@ uint32_t fpc_auth_step(uint32_t *print_id)
         return -1;
     }
 
-
-
-    *print_id = fpc_get_print_id(rec_cmd->id);
-    return 0;
+    return rec_cmd->id;
 }
 
 int fpc_auth_end()
@@ -578,10 +541,10 @@ uint32_t fpc_get_print_count()
 }
 
 
-fpc_fingerprint_index_t fpc_get_print_index(int count)
+fpc_get_pint_index_cmd_t fpc_get_print_index(int count)
 {
 
-    fpc_fingerprint_index_t data;
+    fpc_get_pint_index_cmd_t data;
 
     fpc_send_std_cmd_t* send_cmd = (fpc_send_std_cmd_t*) mHandle->ion_sbuffer;
     fpc_get_pint_index_cmd_t* rec_cmd = (fpc_get_pint_index_cmd_t*) mHandle->ion_sbuffer + 64;
@@ -592,11 +555,11 @@ fpc_fingerprint_index_t fpc_get_print_index(int count)
 
     int ret = send_cmd_fn(mHandle,send_cmd,64,rec_cmd,64);
 
-    data.prints[0] = fpc_get_print_id(rec_cmd->p1);
-    data.prints[1] = fpc_get_print_id(rec_cmd->p2);
-    data.prints[2] = fpc_get_print_id(rec_cmd->p3);
-    data.prints[3] = fpc_get_print_id(rec_cmd->p4);
-    data.prints[4] = fpc_get_print_id(rec_cmd->p5);
+    data.p1 = rec_cmd->p1;
+    data.p2 = rec_cmd->p2;
+    data.p3 = rec_cmd->p3;
+    data.p4 = rec_cmd->p4;
+    data.p5 = rec_cmd->p5;
     data.print_count = rec_cmd->print_count;
 
     return data;
@@ -609,20 +572,37 @@ uint32_t fpc_get_user_db_length()
     fpc_send_std_cmd_t* send_cmd = (fpc_send_std_cmd_t*) mHandle->ion_sbuffer;
     fpc_send_std_cmd_t* rec_cmd = (fpc_send_std_cmd_t*) mHandle->ion_sbuffer + 64;
 
-    send_cmd->cmd_id = FPC_GET_DB_LENGTH;
-    send_cmd->ret_val = 0x00;
+//    send_cmd->cmd_id = FPC_GET_DB_LENGTH;
+//    send_cmd->ret_val = 0x00; //check this. 0 - global db, 1 user db
 
+//    int ret = send_cmd_fn(mHandle,send_cmd,64,rec_cmd,64);
+
+//    if(ret < 0) {
+//        return -1;
+//    }
+
+//    ALOGE("FPC_GET_DB_LENGTH return : %d", send_cmd->ret_val);
+
+    send_cmd->cmd_id = 19;
+    send_cmd->ret_val = 0x09; //check this. 0 - global db, 1 user db
+
+//    rec_cmd->ret_val=9;
     int ret = send_cmd_fn(mHandle,send_cmd,64,rec_cmd,64);
 
     if(ret < 0) {
+	ALOGE("FPC_GET_DB_LENGTH step 2 failed");
         return -1;
     }
+
+    ALOGE("FPC_GET_DB_LENGTH step 2 return : %d", send_cmd->ret_val);
+
+
 
     return send_cmd->ret_val;
 }
 
 
-int fpc_load_user_db(char* path)
+uint32_t fpc_load_user_db(char* path)
 {
 
     FILE *f = fopen(path, "r");
@@ -665,6 +645,7 @@ int fpc_load_user_db(char* path)
     int ret = send_modified_cmd_fn(mHandle,send_cmd,64,rec_cmd,64,&ion_fd_info);
 
     if(ret < 0) {
+	 ALOGE("Error sending FPC_SET_DB_DATA to tz\n");
         qcom_km_ion_dealloc(&ihandle);
         return -1;
     }
@@ -676,11 +657,17 @@ int fpc_load_user_db(char* path)
     }
 
     qcom_km_ion_dealloc(&ihandle);
+
+//    if (send_normal_command(FPC_INIT_NEW_DB,0,mHandle) != 0) {
+//        ALOGE("Error sending FPC_INIT_NEW_DB to tz\n");
+//         return -1;
+//    }
+
     return 0;
 
 }
 
-int fpc_store_user_db(uint32_t length, char* path)
+uint32_t fpc_store_user_db(uint32_t length, char* path)
 {
 
     fpc_send_mod_cmd_t* send_cmd = (fpc_send_mod_cmd_t*) mHandle->ion_sbuffer;
@@ -736,12 +723,6 @@ int fpc_store_user_db(uint32_t length, char* path)
     return 0;
 }
 
-int fpc_set_gid(uint32_t __unused gid)
-{
-    // Not used on ido
-    return 0;
-};
-
 int fpc_close()
 {
     if (device_disable() < 0) {
@@ -772,35 +753,35 @@ int fpc_init()
     if (qsee_load_trustlet(&mHandle, FP_TZAPP_PATH,
                              FP_TZAPP_NAME, 1024) < 0)
         return -1;
-
-    if (qsee_load_trustlet(&mHandle, KM_TZAPP_PATH,
-                             KM_TZAPP_NAME, 1024) < 0)
-        return -1;
-
-    // Start creating one off command to get cert from keymaster
-    fpc_send_std_cmd_t *req = (fpc_send_std_cmd_t *) mHdl->ion_sbuffer;
-    req->cmd_id = 0x205;
-    req->ret_val = 0x02;
-
-    void * send_buf = mHdl->ion_sbuffer;
-    void * rec_buf = mHdl->ion_sbuffer + 64;
-
-    if (send_cmd_fn(mHdl, send_buf, 64, rec_buf, 1024-64) < 0) {
-        return -1;
-    }
-
-    //Send command to keymaster
-    fpc_send_std_cmd_t* ret_data = (fpc_send_std_cmd_t*) rec_buf;
-
-    ALOGE("Keymaster Response Code : %u\n", ret_data->ret_val);
-    ALOGE("Keymaster Response Length : %u\n", ret_data->length);
-
-    void * data_buff = &ret_data->length + 1;
-
-    if (send_modified_command_to_tz(FPC_SET_INIT_DATA,mHandle,data_buff,ret_data->length) < 0) {
-        ALOGE("Error sending data to tz\n");
-        return -1;
-    }
+// not needed for Redmi 3
+//     if (qsee_load_trustlet(&mHandle, KM_TZAPP_PATH,
+//                              KM_TZAPP_NAME, 1024) < 0)
+//         return -1;
+// 
+//     // Start creating one off command to get cert from keymaster
+//     fpc_send_std_cmd_t *req = (fpc_send_std_cmd_t *) mHdl->ion_sbuffer;
+//     req->cmd_id = 0x205;
+//     req->ret_val = 0x02;
+// 
+//     void * send_buf = mHdl->ion_sbuffer;
+//     void * rec_buf = mHdl->ion_sbuffer + 64;
+// 
+//     if (send_cmd_fn(mHdl, send_buf, 64, rec_buf, 1024-64) < 0) {
+//         return -1;
+//     }
+// 
+//     //Send command to keymaster
+//     fpc_send_std_cmd_t* ret_data = (fpc_send_std_cmd_t*) rec_buf;
+// 
+//     ALOGE("Keymaster Response Code : %u\n", ret_data->ret_val);
+//     ALOGE("Keymaster Response Length : %u\n", ret_data->length);
+// 
+//     void * data_buff = &ret_data->length + 1;
+// 
+//     if (send_modified_command_to_tz(FPC_SET_INIT_DATA,mHandle,data_buff,ret_data->length) < 0) {
+//         ALOGE("Error sending data to tz\n");
+//         return -1;
+//     }
 
     if (send_normal_command(FPC_INIT,0,mHandle) != 0) {
         ALOGE("Error sending FPC_INIT to tz\n");
@@ -812,43 +793,47 @@ int fpc_init()
         return -1;
     }
 
-    if (send_normal_command(FPC_INIT_UNK_1,0,mHandle) != 12) {
+    if (send_normal_command(FPC_INIT_UNK_1,0,mHandle) != 12) { // if ==13 engeniring mode else unkn
         ALOGE("Error sending FPC_INIT_UNK_1 to tz\n");
-        return -1;
+        //return -1; // not needed for redmi 3? 
     }
 
     if (device_enable() < 0) {
         ALOGE("Error starting device\n");
         return -1;
     }
+    //not needed for redmi 3?
+//     if (send_normal_command(FPC_INIT_UNK_2,0,mHandle) != 0) {
+//         ALOGE("Error sending FPC_INIT_UNK_2 to tz\n");
+//         return -1;
+//     }
 
-    if (send_normal_command(FPC_INIT_UNK_2,0,mHandle) != 0) {
-        ALOGE("Error sending FPC_INIT_UNK_2 to tz\n");
-        return -1;
-    }
 
+    
     int fpc_info = send_normal_command(FPC_INIT_UNK_0,0,mHandle);
 
     ALOGI("Got device data : %d \n", fpc_info);
 
+    //fpc_tac_load_global_db
     if (device_disable() < 0) {
         ALOGE("Error stopping device\n");
         return -1;
     }
-
-    set_bandwidth_fn(mHandle,true);
-
-    if (send_normal_command(FPC_INIT_NEW_DB,0,mHandle) != 0) {
-        ALOGE("Error sending FPC_INIT_NEW_DB to tz\n");
-        return -1;
-    }
-
-    if (send_normal_command(FPC_SET_FP_STORE,0,mHandle) != 0) {
-        ALOGE("Error sending FPC_SET_FP_STORE to tz\n");
-        return -1;
-    }
-
-    set_bandwidth_fn(mHandle,false);
+    //fpc_tac_send_template_db ?
+    //check this!!!
+//     set_bandwidth_fn(mHandle,true);
+// 
+//     if (send_normal_command(FPC_INIT_NEW_DB,0,mHandle) != 0) {
+//         ALOGE("Error sending FPC_INIT_NEW_DB to tz\n");
+//         return -1;
+//     }
+// 
+//     if (send_normal_command(FPC_SET_FP_STORE,0,mHandle) != 0) {
+//         ALOGE("Error sending FPC_SET_FP_STORE to tz\n");
+//         return -1;
+//     }
+// 
+//     set_bandwidth_fn(mHandle,false);
 
     return 1;
 
