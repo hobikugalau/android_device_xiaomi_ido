@@ -49,8 +49,8 @@ void cm_power_set_interactive_ext(int on)
 {
     if (!is_target_8916()) {
         ALOGD("%s low power mode", on ? "Disabling" : "Enabling");
-        sysfs_write(BIG_CLUSTER_CTL_PATH "max_cpus", on ? "4" : "0");
-        sysfs_write(BIG_CLUSTER_CTL_PATH "min_cpus", on ? "4" : "0");
-        sysfs_write(SMALL_CLUSTER_CTL_PATH "min_cpus", on ? "0" : "4");
+        sysfs_write(BIG_CLUSTER_CTL_PATH "max_cpus", on ? "2" : "2");
+        sysfs_write(BIG_CLUSTER_CTL_PATH "min_cpus", on ? "3" : "1");
+        sysfs_write(SMALL_CLUSTER_CTL_PATH "min_cpus", on ? "0" : "2");
     }
 }
