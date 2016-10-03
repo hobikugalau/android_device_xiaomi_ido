@@ -298,7 +298,7 @@ int fpc_wait_for_finger()
 
     int finger_state  = send_normal_command(FPC_CHK_FP_LOST,FPC_CHK_FP_LOST,mHandle);
 
-//    ALOGD("%s : got finget_state = %d\n", __func__, finger_state);
+    ALOGD("%s : got finget_state = %d\n", __func__, finger_state);
 //    return -1;
     // 4 - finger detected
     // 6 - no
@@ -314,11 +314,12 @@ int fpc_wait_for_finger()
         return -1;
     }*/
 
-    if (finger_state != 4) {
-//        ALOGD("%s : FINGER NOT DETECTED finger_state = %d\n", __func__, finger_state);
-	return -1;
-    }
+    
+    if (finger_state == 10) {
+        return finger_state;
+    } 
 
+    // 4 and 6
     sysfs_write(SPI_WAKE_FILE,"enable");
     if (send_normal_command(FPC_SET_WAKE,0,mHandle) != 0) {
         ALOGE("Error sending FPC_SET_WAKE to tz\n");
@@ -332,7 +333,10 @@ int fpc_wait_for_finger()
     if (sys_fs_irq_poll(SPI_IRQ_FILE) < 0) {
         sysfs_write(SPI_CLK_FILE,"1");
         sysfs_write(SPI_WAKE_FILE,"disable");
-        return 1;
+        
+
+        if (finger_state == 6)
+             return 6;
     }
 
     ALOGD("%s : SPI_CLK_FILE 1\n", __func__);
@@ -347,7 +351,7 @@ int fpc_wait_for_finger()
     // 6 too fast
     if (wake_type == 5) { 
         ALOGD("%s : READY TO CAPTURE\n", __func__);
-        return 0;
+        return 4;
     } else {
         ALOGD("%s : NOT READY TRY AGAIN\n", __func__);
         return 1;
@@ -368,14 +372,11 @@ int fpc_capture_image()
 
     int ret = fpc_wait_for_finger();
 
-    if (ret == 0) {
+    if (ret == 4) {
         //If wait reported 0 we can try and capture the image
-	ALOGE("Trying capture image \n");
+    	ALOGE("Trying capture image \n");
         ret = send_normal_command(FPC_CAPTURE_IMAGE,0,mHandle);
-    } else {
-        //return a high value as to not trigger a user notification
-        ret = 1000; //same as FINGERPRINT_ERROR_VENDOR_BASE
-    }
+    } 
 
     if (device_disable() < 0) {
         ALOGE("Error stopping device\n");
@@ -534,6 +535,7 @@ uint32_t fpc_get_print_count()
     int ret = send_cmd_fn(mHandle,send_cmd,64,rec_cmd,64);
 
     if(ret < 0) {
+        ALOGE("Error sending FPC_GET_ID_COUNT to tz\n");
         return -1;
     }
 
@@ -605,6 +607,12 @@ uint32_t fpc_get_user_db_length()
 uint32_t fpc_load_user_db(char* path)
 {
 
+
+    if (send_normal_command(FPC_INIT_NEW_DB,0,mHandle) != 0) {
+        ALOGE("Error sending FPC_INIT_NEW_DB to tz\n");
+         return -1;
+    }
+
     FILE *f = fopen(path, "r");
 
     if (f == NULL) {
@@ -658,10 +666,7 @@ uint32_t fpc_load_user_db(char* path)
 
     qcom_km_ion_dealloc(&ihandle);
 
-//    if (send_normal_command(FPC_INIT_NEW_DB,0,mHandle) != 0) {
-//        ALOGE("Error sending FPC_INIT_NEW_DB to tz\n");
-//         return -1;
-//    }
+
 
     return 0;
 

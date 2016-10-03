@@ -40,8 +40,8 @@ void *enroll_thread_loop()
 {
     ALOGI("%s", __func__);
     //redmi 3 doesnt do this
-    //uint32_t print_count = fpc_get_print_count();
-    //ALOGD("%s : print count is : %u", __func__, print_count);
+    uint32_t print_count = fpc_get_print_count();
+    ALOGD("%s : print count is : %u", __func__, print_count);
 
     fpc_enroll_start();
 
@@ -61,8 +61,7 @@ void *enroll_thread_loop()
         //image captured
         if (status == FINGERPRINT_ACQUIRED_GOOD ) { //FINGERPRINT_ACQUIRED_GOOD) {
             ALOGI("%s : Enroll Step", __func__);
-//            if (fpc_enroll_step() < 100) {
-		fpc_enroll_step();
+            if (fpc_enroll_step() < 100) {
 //		add decrement counter steps here
 //                int remaining_touches = fpc_get_remaining_touches();
                 ALOGI("%s : Touches Remaining : %d", __func__, remaining_touches);
@@ -74,8 +73,14 @@ void *enroll_thread_loop()
                     msg.data.enroll.samples_remaining = remaining_touches;
                     msg.data.enroll.msg = 0;
                     callback(&msg);
-		    remaining_touches--;
-  //              } 
+        		    remaining_touches--;
+
+                    while (fpc_capture_image() == 6 ) {
+                        usleep(5000);
+                    }
+
+                  } 
+
 
             } else {
                 int print_index = fpc_enroll_end();
@@ -151,12 +156,14 @@ void *auth_thread_loop()
             callback(&msg);
         }
 
+
+
         if (status == FINGERPRINT_ACQUIRED_GOOD) {
 
             int verify_state = fpc_auth_step();
             ALOGI("%s : Auth step = %d", __func__, verify_state);
 
-//            if (verify_state >= 0) {
+            if (verify_state >= 0) {
 
 //                uint32_t print_id = fpc_get_print_id(verify_state);
 //                ALOGI("%s : Got print id : %lu", __func__, (unsigned long) print_id);
@@ -187,8 +194,9 @@ hat.hmac[0] = 1;
                 msg.data.authenticated.finger.fid = 1;
                 msg.data.authenticated.hat = hat;
                 callback(&msg);
+
                 break;
-//            }
+            }
         }
 
         pthread_mutex_lock(&lock);
