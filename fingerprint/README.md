@@ -1,4 +1,6 @@
-# Sony Kitakami Fingerprint HAL #
+# Xiaomi Redmi 3 Pro (ido) Fingerprint HAL #
+
+This code is modified Sony Kitakami Fingerprint HAL code https://github.com/sonyxperiadev/device-sony-common/tree/master/fingerprint
 
 This is an open android HAL to enable the use for the fingerprint authentication sensor on the sony Kitakami platform.
 It makes use of the TrustZone (TZ) fingerprint application via the QSEECOM API (documented here https://android.googlesource.com/platform/hardware/qcom/keymaster/+/android-6.0.1_r26/QSEEComAPI.h)

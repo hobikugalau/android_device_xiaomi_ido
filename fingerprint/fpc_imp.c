@@ -230,63 +230,6 @@ uint64_t fpc_load_db_id()
 //    return get_int64_command(FPC_GET_DB_ID,0,mHandle);
 }
 
-/*int fpc_get_hw_auth_obj(void * buffer, int length)
-{
-
-    fpc_send_mod_cmd_t* send_cmd = (fpc_send_mod_cmd_t*) mHandle->ion_sbuffer;
-    fpc_send_std_cmd_t* rec_cmd = (fpc_send_std_cmd_t*) mHandle->ion_sbuffer + 64;
-
-    struct QSEECom_ion_fd_info  ion_fd_info;
-    struct qcom_km_ion_info_t ihandle;
-
-    ihandle.ion_fd = 0;
-
-    if (qcom_km_ION_memalloc(&ihandle, length) <0) {
-        ALOGE("ION allocation  failed");
-        return -1;
-    }
-
-    memset(&ion_fd_info, 0, sizeof(struct QSEECom_ion_fd_info));
-    ion_fd_info.data[0].fd = ihandle.ifd_data_fd;
-    ion_fd_info.data[0].cmd_buf_offset = 4;
-
-    send_cmd->cmd_id = FPC_GET_AUTH_HAT;
-    send_cmd->v_addr = (intptr_t) ihandle.ion_sbuffer;
-    send_cmd->length = length;
-    send_cmd->extra = 0x00;
-
-    memset((unsigned char *)ihandle.ion_sbuffer, 0, length);
-
-    int ret = send_modified_cmd_fn(mHandle,send_cmd,64,rec_cmd,64,&ion_fd_info);
-
-    memcpy(buffer, (unsigned char *)ihandle.ion_sbuffer, length);
-
-    if(ret < 0) {
-        qcom_km_ion_dealloc(&ihandle);
-        return -1;
-    }
-
-    if (send_cmd->v_addr != 0) {
-        ALOGE("Error on TZ\n");
-        qcom_km_ion_dealloc(&ihandle);
-        return -1;
-    }
-
-    qcom_km_ion_dealloc(&ihandle);
-    return 0;
-
-}*/
-
-/*int fpc_verify_auth_challange(void* hat, uint32_t size)
-{
-    return send_modified_command_to_tz(FPC_VERIFY_AUTH_CHALLENGE,mHandle,hat,size);
-}*/
-
-/*uint32_t fpc_get_remaining_touches()
-{
-    return send_normal_command(FPC_GET_REMAINING_TOUCHES,0,mHandle);
-}*/
-
 uint32_t fpc_del_print_id(uint32_t id)
 {
     return send_normal_command(FPC_GET_DEL_PRINT,id,mHandle);
@@ -412,9 +355,8 @@ int fpc_enroll_start()
 
     send_cmd->cmd_id = FPC_ENROLL_START;
     send_cmd->ret_val = 0x00;
-    //redmi3 use simple commend here
-//     send_cmd->na1 = 0x45;
-//     send_cmd->print_index = print_index;
+    //redmi3 use simple command here
+
 
     int ret = send_cmd_fn(mHandle,send_cmd,64,rec_cmd,64);
 
@@ -570,35 +512,19 @@ fpc_get_pint_index_cmd_t fpc_get_print_index(int count)
 
 uint32_t fpc_get_user_db_length()
 {
-
     fpc_send_std_cmd_t* send_cmd = (fpc_send_std_cmd_t*) mHandle->ion_sbuffer;
     fpc_send_std_cmd_t* rec_cmd = (fpc_send_std_cmd_t*) mHandle->ion_sbuffer + 64;
 
-//    send_cmd->cmd_id = FPC_GET_DB_LENGTH;
-//    send_cmd->ret_val = 0x00; //check this. 0 - global db, 1 user db
+    send_cmd->cmd_id = FPC_GET_DB_LENGTH;
+    send_cmd->length = 0x01; //check this. 0 - global db, 1 user db
 
-//    int ret = send_cmd_fn(mHandle,send_cmd,64,rec_cmd,64);
 
-//    if(ret < 0) {
-//        return -1;
-//    }
-
-//    ALOGE("FPC_GET_DB_LENGTH return : %d", send_cmd->ret_val);
-
-    send_cmd->cmd_id = 19;
-    send_cmd->ret_val = 0x09; //check this. 0 - global db, 1 user db
-
-//    rec_cmd->ret_val=9;
     int ret = send_cmd_fn(mHandle,send_cmd,64,rec_cmd,64);
 
     if(ret < 0) {
-	ALOGE("FPC_GET_DB_LENGTH step 2 failed");
+    	ALOGE("FPC_GET_DB_LENGTH failed");
         return -1;
     }
-
-    ALOGE("FPC_GET_DB_LENGTH step 2 return : %d", send_cmd->ret_val);
-
-
 
     return send_cmd->ret_val;
 }
@@ -607,11 +533,7 @@ uint32_t fpc_get_user_db_length()
 uint32_t fpc_load_user_db(char* path)
 {
 
-
-    if (send_normal_command(FPC_INIT_NEW_DB,0,mHandle) != 0) {
-        ALOGE("Error sending FPC_INIT_NEW_DB to tz\n");
-         return -1;
-    }
+    set_bandwidth_fn(mHandle,true);
 
     FILE *f = fopen(path, "r");
 
@@ -648,7 +570,7 @@ uint32_t fpc_load_user_db(char* path)
     send_cmd->cmd_id = FPC_SET_DB_DATA;
     send_cmd->v_addr = (intptr_t) ihandle.ion_sbuffer;
     send_cmd->length = fsize;
-    send_cmd->extra = 0x00;
+    send_cmd->extra = 0x01;
 
     int ret = send_modified_cmd_fn(mHandle,send_cmd,64,rec_cmd,64,&ion_fd_info);
 
@@ -665,8 +587,7 @@ uint32_t fpc_load_user_db(char* path)
     }
 
     qcom_km_ion_dealloc(&ihandle);
-
-
+    set_bandwidth_fn(mHandle,false);
 
     return 0;
 
@@ -674,6 +595,11 @@ uint32_t fpc_load_user_db(char* path)
 
 uint32_t fpc_store_user_db(uint32_t length, char* path)
 {
+
+    set_bandwidth_fn(mHandle,true);
+
+    // get size commend 19, arg 1(user)
+    // done external as fpc_get_user_db_length ?
 
     fpc_send_mod_cmd_t* send_cmd = (fpc_send_mod_cmd_t*) mHandle->ion_sbuffer;
     fpc_send_std_cmd_t* rec_cmd = (fpc_send_std_cmd_t*) mHandle->ion_sbuffer + 64;
@@ -695,7 +621,7 @@ uint32_t fpc_store_user_db(uint32_t length, char* path)
     send_cmd->cmd_id = FPC_GET_DB_DATA;
     send_cmd->v_addr = (intptr_t) ihandle.ion_sbuffer;
     send_cmd->length = length;
-    send_cmd->extra = 0x00;
+    send_cmd->extra = 0x01; //dbtype 0 - global, 1 - user
 
     memset((unsigned char *)ihandle.ion_sbuffer, 0, length);
 
@@ -725,6 +651,7 @@ uint32_t fpc_store_user_db(uint32_t length, char* path)
     fclose(f);
 
     qcom_km_ion_dealloc(&ihandle);
+    set_bandwidth_fn(mHandle,false);
     return 0;
 }
 
@@ -758,35 +685,6 @@ int fpc_init()
     if (qsee_load_trustlet(&mHandle, FP_TZAPP_PATH,
                              FP_TZAPP_NAME, 1024) < 0)
         return -1;
-// not needed for Redmi 3
-//     if (qsee_load_trustlet(&mHandle, KM_TZAPP_PATH,
-//                              KM_TZAPP_NAME, 1024) < 0)
-//         return -1;
-// 
-//     // Start creating one off command to get cert from keymaster
-//     fpc_send_std_cmd_t *req = (fpc_send_std_cmd_t *) mHdl->ion_sbuffer;
-//     req->cmd_id = 0x205;
-//     req->ret_val = 0x02;
-// 
-//     void * send_buf = mHdl->ion_sbuffer;
-//     void * rec_buf = mHdl->ion_sbuffer + 64;
-// 
-//     if (send_cmd_fn(mHdl, send_buf, 64, rec_buf, 1024-64) < 0) {
-//         return -1;
-//     }
-// 
-//     //Send command to keymaster
-//     fpc_send_std_cmd_t* ret_data = (fpc_send_std_cmd_t*) rec_buf;
-// 
-//     ALOGE("Keymaster Response Code : %u\n", ret_data->ret_val);
-//     ALOGE("Keymaster Response Length : %u\n", ret_data->length);
-// 
-//     void * data_buff = &ret_data->length + 1;
-// 
-//     if (send_modified_command_to_tz(FPC_SET_INIT_DATA,mHandle,data_buff,ret_data->length) < 0) {
-//         ALOGE("Error sending data to tz\n");
-//         return -1;
-//     }
 
     if (send_normal_command(FPC_INIT,0,mHandle) != 0) {
         ALOGE("Error sending FPC_INIT to tz\n");
@@ -798,47 +696,32 @@ int fpc_init()
         return -1;
     }
 
-    if (send_normal_command(FPC_INIT_UNK_1,0,mHandle) != 12) { // if ==13 engeniring mode else unkn
-        ALOGE("Error sending FPC_INIT_UNK_1 to tz\n");
-        //return -1; // not needed for redmi 3? 
-    }
+    //activate engeneering mode, not need for daily use, skip
+//    if (send_normal_command(FPC_INIT_UNK_1,0,mHandle) != 12) { // if ==13 engeniring mode else unkn
+//        ALOGE("Error sending FPC_INIT_UNK_1 to tz\n");
+//        //return -1; // not needed for redmi 3? 
+//    }
 
     if (device_enable() < 0) {
         ALOGE("Error starting device\n");
         return -1;
     }
-    //not needed for redmi 3?
-//     if (send_normal_command(FPC_INIT_UNK_2,0,mHandle) != 0) {
-//         ALOGE("Error sending FPC_INIT_UNK_2 to tz\n");
-//         return -1;
-//     }
 
-
-    
+   
     int fpc_info = send_normal_command(FPC_INIT_UNK_0,0,mHandle);
 
     ALOGI("Got device data : %d \n", fpc_info);
 
-    //fpc_tac_load_global_db
+
     if (device_disable() < 0) {
         ALOGE("Error stopping device\n");
         return -1;
     }
-    //fpc_tac_send_template_db ?
-    //check this!!!
-//     set_bandwidth_fn(mHandle,true);
-// 
-//     if (send_normal_command(FPC_INIT_NEW_DB,0,mHandle) != 0) {
-//         ALOGE("Error sending FPC_INIT_NEW_DB to tz\n");
-//         return -1;
-//     }
-// 
-//     if (send_normal_command(FPC_SET_FP_STORE,0,mHandle) != 0) {
-//         ALOGE("Error sending FPC_SET_FP_STORE to tz\n");
-//         return -1;
-//     }
-// 
-//     set_bandwidth_fn(mHandle,false);
+
+     if (send_normal_command(FPC_SET_FP_STORE,0,mHandle) != 0) {
+         ALOGE("Error sending FPC_SET_FP_STORE to tz\n");
+         return -1;
+     }
 
     return 1;
 

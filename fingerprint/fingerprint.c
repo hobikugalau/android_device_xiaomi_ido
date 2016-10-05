@@ -101,14 +101,7 @@ void *enroll_thread_loop()
                 uint32_t db_length = fpc_get_user_db_length();
                 ALOGI("%s : User Database Length Is : %lu", __func__,(unsigned long) db_length);
 
-//                set_bandwidth_fn(mHandle,true); //check this (used in redmi 3 hal)
-
                 fpc_store_user_db(db_length, db_path);
-//                set_bandwidth_fn(mHandle,false); //check this (used in redmi 3 hal)
-                //fpc_tac_get_template from index
-
-
-
 
                 fingerprint_msg_t msg;
                 msg.type = FINGERPRINT_TEMPLATE_ENROLLING;
@@ -176,7 +169,7 @@ void *auth_thread_loop()
                 hat.authenticator_id = 1;    // secure authenticator ID
                 hat.authenticator_type = 1;  // hw_authenticator_type_t, in network order
                 hat.timestamp = time(NULL);           // in network order
-hat.hmac[0] = 1;
+                hat.hmac[0] = 1;
                 //all this looks unsupported on redmi 3
 //                fpc_get_hw_auth_obj(&hat, sizeof(hw_auth_token_t));
 
@@ -375,16 +368,13 @@ static int fingerprint_remove(struct fingerprint_device __unused *dev,
 static int fingerprint_set_active_group(struct fingerprint_device __unused *dev,
                                         uint32_t __unused gid, const char __unused *store_path)
 {
-
     sprintf(db_path,"%s/data_%d.db",store_path,gid);
     ALOGI("%s : storage path set to : %s",__func__, db_path);
-    set_bandwidth_fn(mHandle,true);
 	
     int ret = fpc_load_user_db(db_path);
     if (!ret) {
-	ALOGE("Faailed to store new db path\n");
+    	ALOGE("Failed to load saved db from path: %s\n",db_path);
     }
-     set_bandwidth_fn(mHandle,false);
 
     return 0;
 
